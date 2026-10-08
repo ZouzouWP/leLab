@@ -24,7 +24,6 @@ from typing import Any
 from pydantic import BaseModel
 
 from lerobot.configs.dataset import DatasetRecordConfig
-from lerobot.configs.video import RGBEncoderConfig
 from lerobot.datasets import LeRobotDataset
 from lerobot.robots.so_follower import SO101FollowerConfig
 
@@ -208,10 +207,6 @@ def create_record_config(request: RecordingRequest) -> RecordConfig:
         tags=with_lelab_tag(request.tags) if request.push_to_hub else None,
         private=request.private,
         streaming_encoding=request.streaming_encoding,
-        # libsvtav1 (lerobot's default) is CPU-heavy enough on this machine to starve
-        # the motor bus read loop mid-recording ("no status packet" ConnectionError,
-        # see 2026-07-15 crashes). h264/ultrafast measured ~11x faster to encode here.
-        rgb_encoder=RGBEncoderConfig(vcodec="h264", preset="ultrafast"),
     )
 
     # Create the main record config
@@ -349,7 +344,7 @@ def handle_start_recording(request: RecordingRequest) -> dict[str, Any]:
                 # count: the frontend still offers them for upload.
                 last_recording_info = {
                     "success": False,
-                    "error": str(e),
+                    "error": str(e) or repr(e),
                     "dataset_repo_id": request.dataset_repo_id,
                     "saved_episodes": saved_episodes,
                 }
@@ -461,11 +456,7 @@ def handle_recording_status() -> dict[str, Any]:
             "rerecord_episode": recording_active
             and current_phase == "recording",  # Only during recording phase
         },
-        "message": (
-            f"Recording failed: {last_recording_info['error']}"
-            if last_recording_info and last_recording_info.get("error")
-            else "Recording session failed with error - check logs"
-        )
+        "message": "Recording session failed with error - check logs"
         if current_phase == "error"
         else (
             "Recording session has ended - stop polling"
